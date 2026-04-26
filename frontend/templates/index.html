@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Log Anomaly Detection Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <header>
+    <h1>AI Log Anomaly Detection Dashboard</h1>
+    <p class="subtitle">SOC-style ML-powered log analysis</p>
+  </header>
+
+  <main>
+
+    <!-- Upload Section -->
+    <section id="upload-section">
+      <h2>Upload Log File</h2>
+      <div class="upload-controls">
+        <label for="file-input" class="file-label">
+          Choose CSV File
+          <input type="file" id="file-input" accept=".csv">
+        </label>
+        <button id="upload-btn">Upload CSV</button>
+      </div>
+
+      <div id="spinner" class="spinner hidden" role="status" aria-label="Loading">
+        <div class="spinner-ring"></div>
+      </div>
+
+      <div id="error-banner" class="error-banner hidden" role="alert">
+        <span id="error-message"></span>
+        <button id="error-close" aria-label="Dismiss error">×</button>
+      </div>
+    </section>
+
+    <!-- Preview Section -->
+    <section id="preview-section" class="hidden">
+      <h2>Data Preview</h2>
+      <div id="preview-container" class="table-wrapper"></div>
+    </section>
+
+    <!-- Controls Section -->
+    <section id="controls-section" class="hidden">
+      <div class="controls-row">
+        <button id="detect-btn">Detect Anomalies</button>
+        <label class="toggle-label">
+          <input type="checkbox" id="filter-toggle">
+          Show Anomalies Only
+        </label>
+        <button id="download-btn" disabled>Download Results</button>
+      </div>
+    </section>
+
+    <!-- Summary Section -->
+    <section id="summary-section" class="hidden">
+      <h2>Detection Summary</h2>
+      <div class="summary-cards">
+        <div class="summary-card">
+          <span class="summary-label">Total Entries</span>
+          <span id="summary-total" class="summary-value">0</span>
+        </div>
+        <div class="summary-card summary-card--anomaly">
+          <span class="summary-label">Anomalies Detected</span>
+          <span id="summary-anomalies" class="summary-value">0</span>
+        </div>
+        <div class="summary-card summary-card--high">
+          <span class="summary-label">HIGH</span>
+          <span id="summary-high" class="summary-value">0</span>
+        </div>
+        <div class="summary-card summary-card--medium">
+          <span class="summary-label">MEDIUM</span>
+          <span id="summary-medium" class="summary-value">0</span>
+        </div>
+        <div class="summary-card summary-card--low">
+          <span class="summary-label">LOW</span>
+          <span id="summary-low" class="summary-value">0</span>
+        </div>
+        <div class="summary-card">
+          <span class="summary-label">Visible Rows</span>
+          <span id="summary-visible" class="summary-value">0</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Results Section -->
+    <section id="results-section" class="hidden">
+      <h2>Detection Results</h2>
+      <div class="table-wrapper">
+        <table id="results-table">
+          <thead id="results-thead"></thead>
+          <tbody id="results-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="/static/script.js" defer></script>
+</body>
+</html>
