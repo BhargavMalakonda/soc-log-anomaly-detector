@@ -485,3 +485,154 @@ tbody tr:hover {
 .error-banner button:hover:not(:disabled) {
   background-color: rgba(252, 165, 165, 0.15);
 }
+
+/* ============================================================
+   Feature Report — collapsible "How your columns were processed"
+   ============================================================ */
+
+#feature-report-section {
+  margin-top: 1.5rem;
+}
+
+#feature-report-details {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.feature-report-summary {
+  padding: 0.75rem 1.25rem;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--color-text);
+  list-style: none;           /* remove default triangle in some browsers */
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  user-select: none;
+}
+
+.feature-report-summary::-webkit-details-marker {
+  display: none;              /* hide Safari triangle */
+}
+
+/* custom chevron via ::before */
+.feature-report-summary::before {
+  content: '▶';
+  font-size: 0.7rem;
+  transition: transform 0.2s ease;
+  color: var(--color-accent);
+}
+
+#feature-report-details[open] .feature-report-summary::before {
+  transform: rotate(90deg);
+}
+
+.feature-report-summary:hover {
+  background: var(--color-surface-2);
+}
+
+.feature-report-container {
+  overflow-x: auto;
+  padding: 0 1rem 1rem;
+}
+
+.feature-report-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.feature-report-table th {
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  font-weight: 600;
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.feature-report-table td {
+  padding: 0.45rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text);
+  vertical-align: top;
+}
+
+.feature-report-table tr:last-child td {
+  border-bottom: none;
+}
+
+.feature-report-table tr:hover td {
+  background: var(--color-surface-2);
+}
+
+/* Action badges */
+.action-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.action-kept          { background: #1e3a5f; color: #90caf9; }
+.action-ip_encoded    { background: #1a3a2a; color: #80cbc4; }
+.action-datetime_encoded { background: #2a2a1a; color: #fff176; }
+.action-freq_encoded  { background: #2a1a3a; color: #ce93d8; }
+.action-dropped       { background: #3a1a1a; color: #ef9a9a; }
+
+/* Produced-features pill list */
+.feature-pill {
+  display: inline-block;
+  margin: 2px 3px 2px 0;
+  padding: 1px 7px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  font-family: monospace;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+/* ============================================================
+   Contamination control
+   ============================================================ */
+
+.contamination-control {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.contamination-label {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+#contamination-slider {
+  width: 120px;
+  cursor: pointer;
+  accent-color: var(--color-accent);
+}
+
+#contamination-input {
+  width: 5rem;
+  padding: 0.3rem 0.5rem;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+#contamination-input:focus {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}

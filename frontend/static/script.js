@@ -16,9 +16,11 @@
   let spinner, errorBanner, errorMessage, errorClose;
   let previewSection, previewContainer;
   let controlsSection, detectBtn, filterToggle, downloadBtn;
+  let contaminationSlider, contaminationInput;
   let summarySection, summaryTotal, summaryAnomalies, summaryHigh,
       summaryMedium, summaryLow, summaryVisible;
   let resultsSection, resultsThead, resultsTbody;
+  let featureReportSection, featureReportTbody;
   let fileInput;
 
   // ─── Task 11.1 — Spinner & Error helpers ──────────────────────────────────
@@ -108,6 +110,7 @@
     try {
       const formData = new FormData();
       formData.append('file', currentFile);
+      formData.append('contamination', contaminationInput.value);
 
       const response = await fetch('/detect', {
         method: 'POST',
@@ -138,6 +141,12 @@
       summarySection.classList.remove('hidden');
       resultsSection.classList.remove('hidden');
       downloadBtn.disabled = false;
+
+      // Render the feature report collapsible
+      if (data.feature_report && data.feature_report.length > 0) {
+        renderFeatureReport(data.feature_report);
+        featureReportSection.classList.remove('hidden');
+      }
 
       // Apply current filter state
       applyFilter(filterToggle.checked);
@@ -236,7 +245,55 @@
     });
   }
 
-  // ─── Task 11.5 — applyFilter ──────────────────────────────────────────────
+  // ─── Task 11.5 — renderFeatureReport ─────────────────────────────────────
+
+  /**
+   * Populates #feature-report-tbody with one row per FeatureReportEntry.
+   * @param {Array<{original_column: string, action: string, produced_features: string[], drop_reason: string}>} report
+   */
+  function renderFeatureReport(report) {
+    featureReportTbody.innerHTML = '';
+
+    report.forEach(function (entry) {
+      const tr = document.createElement('tr');
+
+      // Original column
+      const tdCol = document.createElement('td');
+      tdCol.textContent = entry.original_column;
+      tr.appendChild(tdCol);
+
+      // Action badge
+      const tdAction = document.createElement('td');
+      const badge = document.createElement('span');
+      badge.className = 'action-badge action-' + entry.action;
+      badge.textContent = entry.action.replace(/_/g, ' ');
+      tdAction.appendChild(badge);
+      tr.appendChild(tdAction);
+
+      // Produced features (pills)
+      const tdFeatures = document.createElement('td');
+      if (entry.produced_features && entry.produced_features.length > 0) {
+        entry.produced_features.forEach(function (feat) {
+          const pill = document.createElement('span');
+          pill.className = 'feature-pill';
+          pill.textContent = feat;
+          tdFeatures.appendChild(pill);
+        });
+      } else {
+        tdFeatures.textContent = '—';
+      }
+      tr.appendChild(tdFeatures);
+
+      // Drop reason
+      const tdReason = document.createElement('td');
+      tdReason.textContent = entry.drop_reason || '—';
+      tr.appendChild(tdReason);
+
+      featureReportTbody.appendChild(tr);
+    });
+  }
+
+  // ─── Task 11.6 — applyFilter ──────────────────────────────────────────────
 
   /**
    * Toggles row visibility in #results-tbody based on anomaly_label.
@@ -332,6 +389,19 @@
     detectBtn = document.getElementById('detect-btn');
     filterToggle = document.getElementById('filter-toggle');
     downloadBtn = document.getElementById('download-btn');
+    contaminationSlider = document.getElementById('contamination-slider');
+    contaminationInput = document.getElementById('contamination-input');
+
+    // Keep slider and number input in sync
+    contaminationSlider.addEventListener('input', function () {
+      contaminationInput.value = this.value;
+    });
+    contaminationInput.addEventListener('input', function () {
+      const v = parseFloat(this.value);
+      if (!isNaN(v) && v >= 0.01 && v <= 0.30) {
+        contaminationSlider.value = v;
+      }
+    });
 
     summarySection = document.getElementById('summary-section');
     summaryTotal = document.getElementById('summary-total');
@@ -344,6 +414,9 @@
     resultsSection = document.getElementById('results-section');
     resultsThead = document.getElementById('results-thead');
     resultsTbody = document.getElementById('results-tbody');
+
+    featureReportSection = document.getElementById('feature-report-section');
+    featureReportTbody = document.getElementById('feature-report-tbody');
 
     fileInput = document.getElementById('file-input');
 

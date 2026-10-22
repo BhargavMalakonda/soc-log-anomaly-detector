@@ -46,6 +46,25 @@
     <section id="controls-section" class="hidden">
       <div class="controls-row">
         <button id="detect-btn">Detect Anomalies</button>
+
+        <div class="contamination-control" title="Expected fraction of anomalies. Higher values flag more rows.">
+          <label for="contamination-input" class="contamination-label">Contamination</label>
+          <input
+            type="range"
+            id="contamination-slider"
+            min="0.01" max="0.30" step="0.01"
+            value="0.05"
+            aria-label="Contamination (slider)"
+          >
+          <input
+            type="number"
+            id="contamination-input"
+            min="0.01" max="0.30" step="0.01"
+            value="0.05"
+            aria-label="Contamination (number)"
+          >
+        </div>
+
         <label class="toggle-label">
           <input type="checkbox" id="filter-toggle">
           Show Anomalies Only
@@ -83,6 +102,26 @@
           <span id="summary-visible" class="summary-value">0</span>
         </div>
       </div>
+    </section>
+
+    <!-- Feature Report Section -->
+    <section id="feature-report-section" class="hidden">
+      <details id="feature-report-details">
+        <summary class="feature-report-summary">How your columns were processed</summary>
+        <div id="feature-report-container" class="feature-report-container" role="region" aria-label="Feature engineering report">
+          <table id="feature-report-table" class="feature-report-table">
+            <thead>
+              <tr>
+                <th scope="col">Original column</th>
+                <th scope="col">Action</th>
+                <th scope="col">Produced features</th>
+                <th scope="col">Drop reason</th>
+              </tr>
+            </thead>
+            <tbody id="feature-report-tbody"></tbody>
+          </table>
+        </div>
+      </details>
     </section>
 
     <!-- Results Section -->
