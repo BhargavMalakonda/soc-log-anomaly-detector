@@ -1,10 +1,23 @@
 """
 generate_sample_logs.py
 
-Generates data/sample_logs.csv with realistic HTTP server log data.
-- At least 200 rows total
-- Columns: timestamp, ip, status, bytes
-- ~90-95% normal entries, ~5-10% anomalous entries
+Generates two files:
+
+  data/sample_logs.csv
+      The file the app ingests: columns timestamp, ip, status, bytes.
+      Format is unchanged from the original.
+
+  data/sample_logs_labeled.csv
+      Same rows in the same order, plus an is_anomaly column
+      (1 for planted-anomaly rows, 0 for normal rows).
+      Used by scripts/evaluate.py for reproducible evaluation.
+
+Row counts
+----------
+The actual output size differs from the value requested in ANOMALY_COUNT because
+generate_anomalous_entries() clamps repeated-IP entries to at least 31 to
+satisfy the "≥ 30 occurrences" signal requirement.  The constant TOTAL_ROWS
+reflects what the script actually writes.
 
 Run with:
     python data/generate_sample_logs.py
@@ -15,22 +28,45 @@ import os
 import random
 from datetime import datetime, timedelta
 
-# Fixed seed for reproducibility
+# ---------------------------------------------------------------------------
+# Reproducibility
+# ---------------------------------------------------------------------------
+
 RANDOM_SEED = 42
 random.seed(RANDOM_SEED)
 
-# Output path relative to this script's location
+# ---------------------------------------------------------------------------
+# Output paths
+# ---------------------------------------------------------------------------
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-OUTPUT_PATH = os.path.join(SCRIPT_DIR, "sample_logs.csv")
+OUTPUT_PATH         = os.path.join(SCRIPT_DIR, "sample_logs.csv")
+OUTPUT_LABELED_PATH = os.path.join(SCRIPT_DIR, "sample_logs_labeled.csv")
 
-# Total rows to generate
-TOTAL_ROWS = 220
+# ---------------------------------------------------------------------------
+# Generation parameters
+# ---------------------------------------------------------------------------
 
-# Anomaly fraction: ~8% of total rows
-ANOMALY_COUNT = 18  # ~8.2% of 220
-NORMAL_COUNT = TOTAL_ROWS - ANOMALY_COUNT  # 202
+# Normal entries to generate.
+NORMAL_COUNT = 202
 
-# Pool of ~20 normal IP addresses
+# Anomaly sub-type counts (see generate_anomalous_entries).
+# Type 1 — high-bytes:        5
+# Type 2 — rare status codes: 3
+# Type 3 — repeated IP:       max(ANOMALY_COUNT - 8, 31) = 31
+# Total anomalous rows actually written: 5 + 3 + 31 = 39
+_HIGH_BYTES_COUNT  = 5
+_RARE_STATUS_COUNT = 3
+_MIN_REPEATED_IP   = 31    # must be ≥ 31 to guarantee the signal
+ANOMALY_COUNT = _HIGH_BYTES_COUNT + _RARE_STATUS_COUNT + _MIN_REPEATED_IP  # 39
+
+# TOTAL_ROWS reflects the real output (202 normal + 39 anomalous).
+TOTAL_ROWS = NORMAL_COUNT + ANOMALY_COUNT  # 241
+
+# ---------------------------------------------------------------------------
+# Address / status pools
+# ---------------------------------------------------------------------------
+
 NORMAL_IP_POOL = [
     "10.0.0.1",
     "10.0.0.2",
@@ -54,117 +90,155 @@ NORMAL_IP_POOL = [
     "198.51.100.6",
 ]
 
-# Normal HTTP status codes
-NORMAL_STATUS_CODES = [200, 301, 302, 304, 404]
-
-# Rare/anomalous status codes
+NORMAL_STATUS_CODES    = [200, 301, 302, 304, 404]
 ANOMALOUS_STATUS_CODES = [500, 503, 429]
 
-# A single IP that will appear repeatedly in the anomalous set (> 30 occurrences total)
+# Single IP that appears repeatedly — the frequency-based anomaly signal.
 REPEATED_ANOMALOUS_IP = "45.33.32.156"
 
-# Base timestamp: start 24 hours ago, spread entries across the day
+# ---------------------------------------------------------------------------
+# Timestamp helper
+# ---------------------------------------------------------------------------
+
 BASE_TIME = datetime(2024, 6, 15, 0, 0, 0)
 
 
 def random_timestamp(index: int, total: int) -> str:
-    """Generate an ISO-8601 timestamp spread across a 24-hour window."""
+    """Return an ISO-8601 timestamp spread across a 24-hour window."""
     seconds_offset = int((index / total) * 86400) + random.randint(-30, 30)
     seconds_offset = max(0, seconds_offset)
-    ts = BASE_TIME + timedelta(seconds=seconds_offset)
-    return ts.strftime("%Y-%m-%dT%H:%M:%S")
+    return (BASE_TIME + timedelta(seconds=seconds_offset)).strftime(
+        "%Y-%m-%dT%H:%M:%S"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Row generators
+# ---------------------------------------------------------------------------
 
 
 def generate_normal_entry(index: int, total: int) -> dict:
-    """Generate a single normal log entry."""
+    """Return a single normal log entry (is_anomaly=0)."""
     return {
         "timestamp": random_timestamp(index, total),
-        "ip": random.choice(NORMAL_IP_POOL),
-        "status": random.choice(NORMAL_STATUS_CODES),
-        "bytes": random.randint(100, 50000),
+        "ip":        random.choice(NORMAL_IP_POOL),
+        "status":    random.choice(NORMAL_STATUS_CODES),
+        "bytes":     random.randint(100, 50000),
+        "is_anomaly": 0,
     }
 
 
-def generate_anomalous_entries(count: int, total: int) -> list[dict]:
-    """
-    Generate anomalous log entries with three types of anomalies:
-    1. Unusually high bytes values (> 500,000)
-    2. Rare status codes (500, 503, 429)
-    3. Repeated requests from a single IP (> 30 occurrences in the anomalous set)
-    """
-    entries = []
+def generate_anomalous_entries(total: int) -> list[dict]:
+    """Return all planted-anomaly rows (is_anomaly=1).
 
-    # Type 1: High bytes anomalies (5 entries)
-    high_bytes_count = 5
-    for i in range(high_bytes_count):
+    Three anomaly types
+    -------------------
+    Type 1 — high bytes (5 rows)
+        bytes in [500_001, 5_000_000]; status 200; IP from normal pool.
+        Detected primarily via the `bytes` feature.
+
+    Type 2 — rare status codes (3 rows)
+        status in {500, 503, 429}; normal-pool IP; bytes in [100, 5000].
+        Detected via the `status` feature.
+
+    Type 3 — repeated source IP (31 rows)
+        All from REPEATED_ANOMALOUS_IP.  The frequency encoding used by
+        preprocess() assigns this IP a very low frequency score, making
+        every row from it an outlier in the ip_freq feature.
+    """
+    entries: list[dict] = []
+
+    # Type 1 — high bytes
+    for i in range(_HIGH_BYTES_COUNT):
         entries.append({
-            "timestamp": random_timestamp(i * 10, total),
-            "ip": random.choice(NORMAL_IP_POOL),
-            "status": 200,
-            "bytes": random.randint(500001, 5000000),
+            "timestamp":  random_timestamp(i * 10, total),
+            "ip":         random.choice(NORMAL_IP_POOL),
+            "status":     200,
+            "bytes":      random.randint(500_001, 5_000_000),
+            "is_anomaly": 1,
         })
 
-    # Type 2: Rare status code anomalies (not from repeated IP, 3 entries)
-    rare_status_count = 3
-    for i in range(rare_status_count):
+    # Type 2 — rare status codes
+    for i in range(_RARE_STATUS_COUNT):
         entries.append({
-            "timestamp": random_timestamp(i * 15 + 5, total),
-            "ip": random.choice(NORMAL_IP_POOL),
-            "status": random.choice(ANOMALOUS_STATUS_CODES),
-            "bytes": random.randint(100, 5000),
+            "timestamp":  random_timestamp(i * 15 + 5, total),
+            "ip":         random.choice(NORMAL_IP_POOL),
+            "status":     random.choice(ANOMALOUS_STATUS_CODES),
+            "bytes":      random.randint(100, 5000),
+            "is_anomaly": 1,
         })
 
-    # Type 3: Repeated requests from a single IP (remaining entries, ensuring > 30 total)
-    # We need > 30 occurrences from REPEATED_ANOMALOUS_IP across the whole dataset.
-    # We'll add enough here to guarantee that.
-    repeated_ip_count = count - high_bytes_count - rare_status_count
-    # Ensure at least 31 entries from the repeated IP
-    repeated_ip_count = max(repeated_ip_count, 31)
-    for i in range(repeated_ip_count):
+    # Type 3 — repeated IP
+    for i in range(_MIN_REPEATED_IP):
         entries.append({
-            "timestamp": random_timestamp(i * 3 + 2, total),
-            "ip": REPEATED_ANOMALOUS_IP,
-            "status": random.choice(ANOMALOUS_STATUS_CODES + [200]),
-            "bytes": random.randint(100, 50000),
+            "timestamp":  random_timestamp(i * 3 + 2, total),
+            "ip":         REPEATED_ANOMALOUS_IP,
+            "status":     random.choice(ANOMALOUS_STATUS_CODES + [200]),
+            "bytes":      random.randint(100, 50000),
+            "is_anomaly": 1,
         })
 
     return entries
 
 
-def main():
-    rows = []
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 
-    # Generate normal entries
+
+def main() -> None:
+    rows: list[dict] = []
+
+    # Normal rows
     for i in range(NORMAL_COUNT):
         rows.append(generate_normal_entry(i, TOTAL_ROWS))
 
-    # Generate anomalous entries
-    anomalous = generate_anomalous_entries(ANOMALY_COUNT, TOTAL_ROWS)
-    rows.extend(anomalous)
+    # Anomalous rows
+    rows.extend(generate_anomalous_entries(TOTAL_ROWS))
 
-    # Shuffle all rows so anomalies are interspersed
+    # Shuffle so anomalies are interspersed; re-assign timestamps to be
+    # chronological after the shuffle.
     random.shuffle(rows)
-
-    # Re-assign timestamps in order so the log looks chronological
     for i, row in enumerate(rows):
         row["timestamp"] = random_timestamp(i, len(rows))
 
-    # Write to CSV
-    fieldnames = ["timestamp", "ip", "status", "bytes"]
+    # ------------------------------------------------------------------
+    # Write app CSV — no is_anomaly column (existing format, unchanged)
+    # ------------------------------------------------------------------
+    app_fieldnames = ["timestamp", "ip", "status", "bytes"]
     with open(OUTPUT_PATH, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(f, fieldnames=app_fieldnames,
+                                extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
 
-    total_written = len(rows)
-    anomaly_written = len(anomalous)
-    repeated_ip_count = sum(1 for r in rows if r["ip"] == REPEATED_ANOMALOUS_IP)
+    # ------------------------------------------------------------------
+    # Write labeled CSV — same rows + is_anomaly column
+    # ------------------------------------------------------------------
+    labeled_fieldnames = ["timestamp", "ip", "status", "bytes", "is_anomaly"]
+    with open(OUTPUT_LABELED_PATH, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=labeled_fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
 
-    print(f"Generated {OUTPUT_PATH}")
-    print(f"  Total rows    : {total_written}")
-    print(f"  Normal rows   : {total_written - anomaly_written}")
-    print(f"  Anomalous rows: {anomaly_written} ({anomaly_written / total_written * 100:.1f}%)")
-    print(f"  Repeated IP ({REPEATED_ANOMALOUS_IP}): {repeated_ip_count} occurrences")
+    # ------------------------------------------------------------------
+    # Summary
+    # ------------------------------------------------------------------
+    total_written   = len(rows)
+    anomaly_written = sum(1 for r in rows if r["is_anomaly"] == 1)
+    normal_written  = total_written - anomaly_written
+    repeated_ip_n   = sum(1 for r in rows if r["ip"] == REPEATED_ANOMALOUS_IP)
+
+    print(f"Wrote {OUTPUT_PATH}")
+    print(f"  Columns : timestamp, ip, status, bytes")
+    print(f"  Rows    : {total_written}")
+
+    print(f"\nWrote {OUTPUT_LABELED_PATH}")
+    print(f"  Columns : timestamp, ip, status, bytes, is_anomaly")
+    print(f"  Rows    : {total_written}")
+    print(f"  Normal  : {normal_written}")
+    print(f"  Anomaly : {anomaly_written} ({anomaly_written / total_written * 100:.1f}%)")
+    print(f"  Repeated IP ({REPEATED_ANOMALOUS_IP}): {repeated_ip_n} occurrences")
 
 
 if __name__ == "__main__":

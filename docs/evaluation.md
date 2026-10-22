@@ -1,0 +1,150 @@
+# Anomaly Detector — Evaluation Report
+
+> **Honest caveat**
+>
+> The dataset is fully synthetic. Anomalies were planted deliberately to be detectable (high bytes, rare HTTP status codes, repeated source IP). These results measure the detector's ability to recover known signals, NOT its performance on real-world log data.
+
+## Dataset
+
+| | |
+|---|---|
+| File | `sample_logs_labeled.csv` |
+| Total rows | 241 |
+| Normal rows | 202 |
+| Planted anomaly rows | 39 |
+| True anomaly rate | 16.2% |
+
+Anomaly sub-types planted in the data:
+
+- **Type 1 — high bytes** (5 rows): `bytes` in \[500 001, 5 000 000\]
+- **Type 2 — rare status codes** (3 rows): `status` ∈ {500, 503, 429}
+- **Type 3 — repeated source IP** (31 rows): all from `45.33.32.156`
+
+## Pipeline (identical to the API)
+
+```
+csv_bytes_to_dataframe(bytes)
+  → preprocess(df)          # type-detect, freq-encode IPs,
+                            # datetime-expand timestamps, MinMaxScale
+  → run_isolation_forest(X, contamination=c, random_state=42)
+  → map label -1 → 1 (anomaly), 1 → 0 (normal)
+```
+
+## Results by contamination
+
+> **Why recall is capped at low contamination**
+>
+> At low contamination the model is only allowed to flag a small fraction of rows as anomalies. When true anomalies exceed that fraction, recall is mechanically capped — the model cannot return more positives than the contamination parameter permits, regardless of how good its ranking is. The practical implication: setting contamination ≥ true anomaly rate is a necessary (though not sufficient) condition for achieving high recall in this unsupervised setup.
+
+### contamination = 0.05
+
+Model flags approximately **12** of 241 rows as anomalies.
+
+**Confusion matrix**
+
+| | Predicted Normal | Predicted Anomaly |
+|---|:---:|:---:|
+| **Actual Normal** | 202 | 0 |
+| **Actual Anomaly** | 27 | 12 |
+
+| Metric | Value |
+|---|---|
+| Precision | 1.000 |
+| Recall | 0.308 |
+| F1 score | 0.471 |
+| False positive rate | 0.000 |
+| True positives | 12 |
+| False positives | 0 |
+| False negatives | 27 |
+| True negatives | 202 |
+
+### contamination = 0.10
+
+Model flags approximately **24** of 241 rows as anomalies.
+
+**Confusion matrix**
+
+| | Predicted Normal | Predicted Anomaly |
+|---|:---:|:---:|
+| **Actual Normal** | 200 | 2 |
+| **Actual Anomaly** | 17 | 22 |
+
+| Metric | Value |
+|---|---|
+| Precision | 0.917 |
+| Recall | 0.564 |
+| F1 score | 0.698 |
+| False positive rate | 0.010 |
+| True positives | 22 |
+| False positives | 2 |
+| False negatives | 17 |
+| True negatives | 200 |
+
+### contamination = 0.15
+
+Model flags approximately **36** of 241 rows as anomalies.
+
+**Confusion matrix**
+
+| | Predicted Normal | Predicted Anomaly |
+|---|:---:|:---:|
+| **Actual Normal** | 196 | 6 |
+| **Actual Anomaly** | 9 | 30 |
+
+| Metric | Value |
+|---|---|
+| Precision | 0.833 |
+| Recall | 0.769 |
+| F1 score | 0.800 |
+| False positive rate | 0.030 |
+| True positives | 30 |
+| False positives | 6 |
+| False negatives | 9 |
+| True negatives | 196 |
+
+### contamination = 0.20
+
+Model flags approximately **48** of 241 rows as anomalies.
+
+**Confusion matrix**
+
+| | Predicted Normal | Predicted Anomaly |
+|---|:---:|:---:|
+| **Actual Normal** | 193 | 9 |
+| **Actual Anomaly** | 0 | 39 |
+
+| Metric | Value |
+|---|---|
+| Precision | 0.812 |
+| Recall | 1.000 |
+| F1 score | 0.897 |
+| False positive rate | 0.045 |
+| True positives | 39 |
+| False positives | 9 |
+| False negatives | 0 |
+| True negatives | 193 |
+
+## Contamination comparison
+
+| Contamination | Rows flagged | Precision | Recall | F1 | FPR |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| 0.05 | 12 | 1.000 | 0.308 | 0.471 | 0.000 |
+| 0.10 | 24 | 0.917 | 0.564 | 0.698 | 0.010 |
+| 0.15 | 36 | 0.833 | 0.769 | 0.800 | 0.030 |
+| 0.20 | 48 | 0.812 | 1.000 | 0.897 | 0.045 |
+
+## Interpretation
+
+At **contamination = 0.05** the model flags 12 rows, of which 12 are true anomalies (precision 1.000, 0 false positives). Recall is 0.308 because the true anomaly rate is 16.2% and the model is only allowed to flag 5% of rows at this setting.
+
+Across the sweep, recall goes from 0.308 to 1.000 and precision goes from 1.000 to 0.812: a higher contamination lets the model flag more rows, which finds more anomalies but also pulls in borderline-normal rows.
+
+F1 is highest at **0.20** (F1 = 0.897), the largest value tested, and was still rising at the last point, so the true optimum is not established by this sweep.
+
+At that setting the model reports 39 true anomalies with 9 false positives (FPR 0.045). A real user would not know the true anomaly rate in advance, so contamination has to be chosen from domain knowledge or by reviewing the flagged rows.
+
+Because IsolationForest scores every row relative to the current batch, results will shift on other datasets, especially larger ones or ones with subtler anomalies. These numbers describe this synthetic file only.
+
+---
+
+*Generated by `scripts/evaluate.py` — re-run to refresh.*
