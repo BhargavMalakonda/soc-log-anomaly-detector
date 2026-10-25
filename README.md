@@ -210,4 +210,5 @@ pytest
 ## Author
 
 **Malakonda Chaitanya Bhargav**
-[LinkedIn](https://www.linkedin.com/in/chaitanya-bhargav-malakonda/)
+
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-blue?logo=linkedin)](https://www.linkedin.com/in/chaitanya-bhargav-malakonda/)
